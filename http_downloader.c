@@ -68,13 +68,34 @@ int main(int argc, char* argv[])
     if(err == 0)
     {
         int socket;
-        int status = open_clientside_tcp_connection(&socket, "80", "www.google.com");
+        int status = open_clientside_tcp_connection(&socket, "443", "www.google.com");
         if(status != 0)
         {
+            printf("TCP socket connection failed.\n");
             exit(-1);
         }
-        
-        init_ssl_ctx();
+
+        SSL_CTX* ssl_context = init_ssl_ctx();
+        SSL* ssl = ssl_new(ssl_context);
+        status = ssl_set_SNI(ssl, "www.google.com");
+        if (status !=0)
+        {
+            printf("SSL SNI setting failed\n");
+            exit(-1);
+        }
+        ssl_fd(&socket, ssl);
+
+        if(SSL_connect(ssl) == -1)
+        {
+            printf("SSL connection failed\n");
+            exit(-1);
+        }
+
+        X509* cert = SSL_get_peer_certificate(ssl);
+        char* line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
+        printf("Subject: %s\n", line);
+        line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
+        printf("Issuer: %s\n", line);
     }
     else
         print_help();
