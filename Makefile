@@ -4,7 +4,7 @@ LDLIBS = -lssl -lcrypto
 all: http_downloader
 
 http_downloader: http_downloader.c
-	gcc http_downloader.c ssl_socket.c $(LDFLAGS) $(LDLIBS) -g -o http_downloader
+	gcc http_downloader.c ssl_socket.c http.c $(LDFLAGS) $(LDLIBS) -g -o http_downloader
 
 clean:
 	rm -f wc http_downloader

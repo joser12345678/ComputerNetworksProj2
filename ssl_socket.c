@@ -89,3 +89,21 @@ void ssl_fd(int* socket, SSL* ssl_connection)
 {
     SSL_set_fd(ssl_connection, *socket);
 }
+
+//frees the ssl connection state
+void ssl_session_free(SSL* ssl)
+{
+    SSL_free(ssl);
+}
+
+//free the ssl context
+void ssl_context_free(SSL_CTX* ssl_context)
+{
+    SSL_CTX_free(ssl_context);
+}
+
+//close the tcp socket used in the ssl connection
+int ssl_socket_close(int* tcp_socket)
+{
+    return close(*tcp_socket);
+}
