@@ -74,17 +74,20 @@ int send_request(struct http_connection_info* info, SSL* ssl)
 
     //if write was successful, allocate response buffer and read from ssl
     //return -1 if read was unsuccessful
-    info->response = malloc(info->read_length + (info->high_range - info->low_range));
-    int bytes;
-    if(!(bytes = SSL_read(ssl, info->response, info->read_length + (info->high_range - info->low_range))))
+    info->response = malloc(info->read_length + info->high_range - info->low_range + 1);
+    size_t read_bytes;
+    size_t total_bytes = 0;
+    while ((read_bytes = SSL_read(ssl, info->response + total_bytes, (info->read_length + info->high_range - info->low_range))))
+        total_bytes += read_bytes;
+    if(!total_bytes)
         return -1;
 
     //make sure null terminated string
-    info->response[bytes] = 0;
+    info->response[total_bytes] = 0;
+    info->content_length = total_bytes;
 
     //check the http return code
-    char* s;
-    if ((s = strstr(info->response, "200 OK")))
+    if ((strstr(info->response, "200 OK")) || strstr(info->response, "206 Partial Content"))
         return 0;
     //else there was an error, print the error code and exit
     else
@@ -93,6 +96,7 @@ int send_request(struct http_connection_info* info, SSL* ssl)
 }
 
 //get the content length from the response section of info
+//as well as content unit
 int get_content_length(struct http_connection_info* info)
 {
     //get pointer to the content length header
@@ -105,10 +109,24 @@ int get_content_length(struct http_connection_info* info)
     if(end_of_line == NULL)
         return -1;
 
+    //do the same to isolate the accept ranges content
+    char* ranges = strstr(info->response, "Accept-Ranges");
+    if(ranges == NULL)
+        return -1;
+    char* eol_ranges = strstr(ranges, "\r\n");
+    if(eol_ranges == NULL)
+        return -1;
+
+    //get the content length, it is a number per the http standard
     s = s + 16;
     char num_ptr[(end_of_line - s)];
     strncpy(num_ptr, s, (end_of_line - s));
     info->high_range = atoi(num_ptr);
+
+    //get the content unit
+    ranges = ranges + 14;
+    info->content_unit = malloc(eol_ranges - ranges);
+    strncpy(info->content_unit, ranges, (eol_ranges - ranges));
 
     return 0;
 }
@@ -119,8 +137,8 @@ int create_get_request(struct http_connection_info* info)
     //allocate 1024 bytes for request body
     info->request = malloc(1024);
 
-    sprintf(info->request, "HEAD %s HTTP/1.1\r\nHost: %s\r\nRange: %ld-%ld\r\n\r\n", 
-        info->path, info->hostname, info->low_range, info->high_range);
+    sprintf(info->request, "GET %s HTTP/1.1\r\nHost: %s\r\nRange: %s=%ld-%ld\r\n\r\n", 
+        info->path, info->hostname, info->content_unit, info->low_range, info->high_range);
 }
 
 //frees connection struct, SET POINTER TO NULL AFTER CALL

@@ -113,7 +113,7 @@ void initial_head_request(struct http_connection_info* c1, char* url)
     //create head and send it
     //if the initial head request was successful and there is an accept ranges header, we can continue
     create_head_request(c1);
-    if(send_request(c1, ssl) == -1 && strstr(c1->response, "Accept-Ranges"))
+    if(send_request(c1, ssl) == -1)
     {
         printf("Response from server wasn't 200 OK or ranges not accepted. HTTP RESPONSE:\n");
         printf("%s\n", c1->response);
@@ -135,13 +135,13 @@ void initial_head_request(struct http_connection_info* c1, char* url)
 
 //create a sub request and fulfill it using the bounds specified
 //in the parameters
-int sub_req(size_t low_b, size_t high_b, char* url)
+int sub_req(size_t low_b, size_t high_b, char* url, char* unit)
 {
-    printf("Range: %ld - %ld\n", low_b, high_b);
     struct http_connection_info* conn = malloc(sizeof(struct http_connection_info));
     init_connection(conn, url);
     conn->low_range = low_b;
     conn->high_range = high_b;
+    conn->content_unit = unit;
 
     //initialize tcp clientside connection socket
     int socket;
@@ -176,6 +176,10 @@ int sub_req(size_t low_b, size_t high_b, char* url)
         printf("%s\n", conn->response);
         exit(-1);
     }
+    
+    char* s = strstr(conn->response, "\r\n\r\n");
+    FILE* pFile = fopen("./testies.jpg","wb");
+    fwrite(s + 4, conn->content_length, 1, pFile);
 
     //test the frees and closes
     ssl_session_free(ssl);
@@ -201,7 +205,7 @@ int main(int argc, char* argv[])
         
         //send the initial head request and get the total content length size
         initial_head_request(c1, url);
-        printf("%s\n", c1->response);
+        //printf("%s\n", c1->response);
         size_t total_content_size = c1->high_range;
 
         //calculate the bounds for each sub request
@@ -210,16 +214,17 @@ int main(int argc, char* argv[])
         for(size_t i = 1; i < thread_count + 1; i++)
         {
             if( i == thread_count)
-                sub_req(start_bound, total_content_size, url);
+                sub_req(start_bound, total_content_size, url, c1->content_unit);
             else
             {
-                sub_req(start_bound, thread_content_size * i, url);
+                sub_req(start_bound, thread_content_size * i, url, c1->content_unit);
                 start_bound = (thread_content_size * i) + 1;
             }
         }
 
         free(url);
         free(output_file);
+        free(c1);
     }
     else
         print_help();

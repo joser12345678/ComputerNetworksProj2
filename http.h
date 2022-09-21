@@ -15,6 +15,8 @@ struct http_connection_info
 
     size_t low_range;    //content length range low bound
     size_t high_range;   //content length range high bound
+    size_t content_length;
+    char* content_unit;  //unit of content length, usually bytes but here for completeness
     char* request;       //pointer to the request string
     
     size_t read_length;  //amount of characters to read from response
