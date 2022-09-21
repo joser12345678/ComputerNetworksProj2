@@ -48,10 +48,10 @@ void init_connection(struct http_connection_info* info, char* url)
     strncpy(info->path, i, path_len);
 
     //set pointers and length to appropriate values
-    info->header_len = -1;      //-1 == default
-    info->headers = NULL;
-    info->method = NULL;
+    info->request = NULL;
     info->response = NULL;
+    info->high_range = 0;
+    info->low_range = 0;
 
 }
 
@@ -81,6 +81,33 @@ int send_request(struct http_connection_info* info, SSL* ssl)
 
     //make sure null terminated string
     info->response[bytes] = 0;
+
+    //check the http return code
+    char* s;
+    if ((s = strstr(info->response, "200 OK")))
+        return 0;
+    //else there was an error, print the error code and exit
+    else
+        return -1;
+    
+}
+
+//get the content length from the response section of info
+int get_content_length(struct http_connection_info* info)
+{
+    //get pointer to the content length header
+    char* s = strstr(info->response, "Content-Length");
+    char* end_of_line = strstr(s, "\r\n");
+
+    //if the content length header and end of line wasn't found, we fail
+    if(s == NULL || end_of_line == NULL)
+        return -1;
+
+    s = s + 16;
+    char num_ptr[(end_of_line - s)];
+    strncpy(num_ptr, s, (end_of_line - s));
+    info->high_range = atoi(num_ptr);
+
     return 0;
 }
 
@@ -92,10 +119,6 @@ void free_connection(struct http_connection_info* info)
     free(info->path);
     free(info->port);
 
-    if(info->headers != NULL)
-        free(info->headers);
-    if(info->method != NULL)
-        free(info->method);
     if(info->request != NULL)
         free(info->request);
     if(info->response != NULL)

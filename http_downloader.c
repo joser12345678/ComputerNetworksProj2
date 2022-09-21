@@ -123,9 +123,19 @@ int main(int argc, char* argv[])
 
         //create head and send it
         create_head_request(c1);
-        send_request(c1, ssl);
-        printf("%s\n", c1->response);
-        free_connection(c1);
+        if(send_request(c1, ssl) == -1)
+        {
+            printf("%s\n", c1->response);
+            exit(-1);
+        }
+
+        //parse request to get the content length
+        if(get_content_length(c1) == -1)
+        {
+            printf("Error: content length not found");
+            exit(-1);
+        }
+        printf("%ld\n", c1->high_range);
 
         //test the frees and closes
         ssl_session_free(ssl);
