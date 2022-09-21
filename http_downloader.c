@@ -82,6 +82,107 @@ int parse_args(int num_args, char* argv[],
         return -1;
 }
 
+//send the initial head request and get the initial HEAD info
+void initial_head_request(struct http_connection_info* c1, char* url)
+{
+    //initialize tcp clientside connection socket
+    int socket;
+    int status = open_clientside_tcp_connection(&socket, c1->port, c1->hostname);
+    if(status != 0)
+    {
+        printf("TCP socket connection failed.\n");
+        exit(-1);
+    }
+
+    //set up ssl connection
+    SSL_CTX* ssl_context = init_ssl_ctx();
+    SSL* ssl = ssl_new(ssl_context);
+    status = ssl_set_SNI(ssl, c1->hostname);
+    if (status !=0)
+    {
+        printf("SSL SNI setting failed\n");
+        exit(-1);
+    }
+    ssl_fd(&socket, ssl);
+    if(SSL_connect(ssl) == -1)
+    {
+        printf("SSL connection failed\n");
+        exit(-1);
+    }
+
+    //create head and send it
+    //if the initial head request was successful and there is an accept ranges header, we can continue
+    create_head_request(c1);
+    if(send_request(c1, ssl) == -1 && strstr(c1->response, "Accept-Ranges"))
+    {
+        printf("Response from server wasn't 200 OK or ranges not accepted. HTTP RESPONSE:\n");
+        printf("%s\n", c1->response);
+        exit(-1);
+    }
+
+    //parse request to get the content length
+    if(get_content_length(c1) == -1)
+    {
+        printf("Error: content length not found");
+        exit(-1);
+    }
+
+    //test the frees and closes
+    ssl_session_free(ssl);
+    ssl_socket_close(&socket);
+    ssl_context_free(ssl_context);
+}
+
+//create a sub request and fulfill it using the bounds specified
+//in the parameters
+int sub_req(size_t low_b, size_t high_b, char* url)
+{
+    printf("Range: %ld - %ld\n", low_b, high_b);
+    struct http_connection_info* conn = malloc(sizeof(struct http_connection_info));
+    init_connection(conn, url);
+    conn->low_range = low_b;
+    conn->high_range = high_b;
+
+    //initialize tcp clientside connection socket
+    int socket;
+    int status = open_clientside_tcp_connection(&socket, conn->port, conn->hostname);
+    if(status != 0)
+    {
+        printf("TCP socket connection failed.\n");
+        exit(-1);
+    }
+
+    //set up ssl connection
+    SSL_CTX* ssl_context = init_ssl_ctx();
+    SSL* ssl = ssl_new(ssl_context);
+    status = ssl_set_SNI(ssl, conn->hostname);
+    if (status !=0)
+    {
+        printf("SSL SNI setting failed\n");
+        exit(-1);
+    }
+    ssl_fd(&socket, ssl);
+    if(SSL_connect(ssl) == -1)
+    {
+        printf("SSL connection failed\n");
+        exit(-1);
+    }
+
+    //create get request and send it
+    create_get_request(conn);
+    if(send_request(conn, ssl) == -1)
+    {
+        printf("Response from server wasn't 200 OK. HTTP RESPONSE:\n");
+        printf("%s\n", conn->response);
+        exit(-1);
+    }
+
+    //test the frees and closes
+    ssl_session_free(ssl);
+    ssl_socket_close(&socket);
+    ssl_context_free(ssl_context);
+}
+
 int main(int argc, char* argv[])
 {
     int thread_count;
@@ -97,50 +198,26 @@ int main(int argc, char* argv[])
         //init info in memory
         c1 = malloc(sizeof(struct http_connection_info));
         init_connection(c1, url);
-        int socket;
-        int status = open_clientside_tcp_connection(&socket, c1->port, c1->hostname);
-        if(status != 0)
+        
+        //send the initial head request and get the total content length size
+        initial_head_request(c1, url);
+        printf("%s\n", c1->response);
+        size_t total_content_size = c1->high_range;
+
+        //calculate the bounds for each sub request
+        size_t thread_content_size = total_content_size / thread_count;
+        size_t start_bound = 0;
+        for(size_t i = 1; i < thread_count + 1; i++)
         {
-            printf("TCP socket connection failed.\n");
-            exit(-1);
+            if( i == thread_count)
+                sub_req(start_bound, total_content_size, url);
+            else
+            {
+                sub_req(start_bound, thread_content_size * i, url);
+                start_bound = (thread_content_size * i) + 1;
+            }
         }
 
-        SSL_CTX* ssl_context = init_ssl_ctx();
-        SSL* ssl = ssl_new(ssl_context);
-        status = ssl_set_SNI(ssl, c1->hostname);
-        if (status !=0)
-        {
-            printf("SSL SNI setting failed\n");
-            exit(-1);
-        }
-        ssl_fd(&socket, ssl);
-
-        if(SSL_connect(ssl) == -1)
-        {
-            printf("SSL connection failed\n");
-            exit(-1);
-        }
-
-        //create head and send it
-        create_head_request(c1);
-        if(send_request(c1, ssl) == -1)
-        {
-            printf("%s\n", c1->response);
-            exit(-1);
-        }
-
-        //parse request to get the content length
-        if(get_content_length(c1) == -1)
-        {
-            printf("Error: content length not found");
-            exit(-1);
-        }
-        printf("%ld\n", c1->high_range);
-
-        //test the frees and closes
-        ssl_session_free(ssl);
-        ssl_socket_close(&socket);
-        ssl_context_free(ssl_context);
         free(url);
         free(output_file);
     }

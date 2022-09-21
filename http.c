@@ -11,14 +11,14 @@ void init_connection(struct http_connection_info* info, char* url)
     char *s;
     if ((s = strstr(url, "https://")))
     {
-        info->port = malloc(3);
-        strncpy(info->port, "443", 3);
+        info->port = malloc(4);
+        strncpy(info->port, "443\0", 4);
         start_ptr = s + 8;
     }
     else if ((s = strstr(url, "http://")))
     {
-        info->port = malloc(2);
-        strncpy(info->port, "80", 2);
+        info->port = malloc(3);
+        strncpy(info->port, "80\0", 3);
         start_ptr = s + 7;
     }
     else
@@ -52,7 +52,7 @@ void init_connection(struct http_connection_info* info, char* url)
     info->response = NULL;
     info->high_range = 0;
     info->low_range = 0;
-
+    info->read_length = 1024;
 }
 
 //creates a head request to send, the request is placed into the 
@@ -74,9 +74,9 @@ int send_request(struct http_connection_info* info, SSL* ssl)
 
     //if write was successful, allocate response buffer and read from ssl
     //return -1 if read was unsuccessful
-    info->response = malloc(1024);
+    info->response = malloc(info->read_length + (info->high_range - info->low_range));
     int bytes;
-    if(!(bytes = SSL_read(ssl, info->response, 1024)))
+    if(!(bytes = SSL_read(ssl, info->response, info->read_length + (info->high_range - info->low_range))))
         return -1;
 
     //make sure null terminated string
@@ -97,10 +97,12 @@ int get_content_length(struct http_connection_info* info)
 {
     //get pointer to the content length header
     char* s = strstr(info->response, "Content-Length");
+    //if content length header wasn't found we fail
+    if (s == NULL)
+        return -1;
     char* end_of_line = strstr(s, "\r\n");
-
-    //if the content length header and end of line wasn't found, we fail
-    if(s == NULL || end_of_line == NULL)
+    //if the end of line wasn't found, we fail
+    if(end_of_line == NULL)
         return -1;
 
     s = s + 16;
@@ -109,6 +111,16 @@ int get_content_length(struct http_connection_info* info)
     info->high_range = atoi(num_ptr);
 
     return 0;
+}
+
+//format get request and place the request into the info struct
+int create_get_request(struct http_connection_info* info)
+{
+    //allocate 1024 bytes for request body
+    info->request = malloc(1024);
+
+    sprintf(info->request, "HEAD %s HTTP/1.1\r\nHost: %s\r\nRange: %ld-%ld\r\n\r\n", 
+        info->path, info->hostname, info->low_range, info->high_range);
 }
 
 //frees connection struct, SET POINTER TO NULL AFTER CALL

@@ -16,6 +16,8 @@ struct http_connection_info
     size_t low_range;    //content length range low bound
     size_t high_range;   //content length range high bound
     char* request;       //pointer to the request string
+    
+    size_t read_length;  //amount of characters to read from response
     char* response;      //pointer to the string containing the response
 };
 
@@ -33,3 +35,9 @@ int create_head_request(struct http_connection_info* info);
 
 //sends request and recieves reply
 int send_request(struct http_connection_info* info, SSL* ssl);
+
+//create get request and place info in the response
+int create_get_request(struct http_connection_info* info);
+
+//save response to file
+int save_response(struct http_connection_info* info, char* file);
