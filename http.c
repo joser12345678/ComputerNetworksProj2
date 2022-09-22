@@ -153,6 +153,10 @@ void free_connection(struct http_connection_info* info)
         free(info->request);
     if(info->response != NULL)
         free(info->response);
+    if(info->content != NULL)
+        free(info->content);
+    if(info->content_unit != NULL)
+        free(info->content_unit);
 
     free(info);
 }

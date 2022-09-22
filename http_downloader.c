@@ -154,15 +154,15 @@ void* sub_req(void* args)
 {
     struct thread_args* args1 = (struct thread_args*) args;
     //printf("%ld - %ld\n", args1->low_b, args1->high_b);
-    struct http_connection_info* conn = malloc(sizeof(struct http_connection_info));
-    init_connection(conn, args1->url);
-    conn->low_range = args1->low_b;
-    conn->high_range = args1->high_b;
-    conn->content_unit = args1->unit;
+    struct http_connection_info conn;
+    init_connection(&conn, args1->url);
+    conn.low_range = args1->low_b;
+    conn.high_range = args1->high_b;
+    conn.content_unit = args1->unit;
 
     //initialize tcp clientside connection socket
     int socket;
-    int status = open_clientside_tcp_connection(&socket, conn->port, conn->hostname);
+    int status = open_clientside_tcp_connection(&socket, conn.port, conn.hostname);
     if(status != 0)
     {
         printf("TCP socket connection failed.\n");
@@ -172,7 +172,7 @@ void* sub_req(void* args)
     //set up ssl connection
     SSL_CTX* ssl_context = init_ssl_ctx();
     SSL* ssl = ssl_new(ssl_context);
-    status = ssl_set_SNI(ssl, conn->hostname);
+    status = ssl_set_SNI(ssl, conn.hostname);
     if (status !=0)
     {
         printf("SSL SNI setting failed\n");
@@ -186,27 +186,34 @@ void* sub_req(void* args)
     }
 
     //create get request and send it
-    create_get_request(conn);
-    if(send_request(conn, ssl) == -1)
+    create_get_request(&conn);
+    if(send_request(&conn, ssl) == -1)
     {
         printf("Response from server wasn't 200 OK. HTTP RESPONSE:\n");
-        printf("%s\n", conn->response);
+        printf("%s\n", conn.response);
         exit(-1);
     }
     
-    char* s = strstr(conn->response, "\r\n\r\n");
+    char* s = strstr(conn.response, "\r\n\r\n");
     pthread_mutex_lock(&file_mut);
     *args1->file_name = malloc(11);
     sprintf(*args1->file_name, "./part_%ld", args1->file_num);
     FILE* file = fopen(*args1->file_name,"wb");
     pthread_mutex_unlock(&file_mut);
-    fwrite(s + 4, conn->content_length, 1, file);
+    fwrite(s + 4, conn.content_length, 1, file);
     fclose(file);
 
-    //test the frees and closes
+    //free ssl and connection pointers
     ssl_session_free(ssl);
     ssl_socket_close(&socket);
     ssl_context_free(ssl_context);
+    //this is done to prevent premature freeing of info from 
+    //the head connection
+    free(conn.request);
+    free(conn.response);
+    free(conn.path);
+    free(conn.hostname);
+    free(conn.port);
     pthread_exit(NULL);
 
 }
@@ -298,7 +305,7 @@ int main(int argc, char* argv[])
 
         free(url);
         free(output_file);
-        free(c1);
+        free_connection(c1);
         pthread_mutex_destroy(&file_mut);
     }
     else
