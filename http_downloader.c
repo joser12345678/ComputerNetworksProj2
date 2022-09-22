@@ -146,9 +146,9 @@ void initial_head_request(struct http_connection_info* c1, char* url)
         status = ssl_set_SNI(ssl, c1->hostname);
         ssl_fd(&socket, ssl);
         SSL_connect(ssl);
-        printf("%s\n", c1->request);
+        //printf("%s\n", c1->request);
         send_request(c1, ssl);
-        printf("%s\n", c1->response);
+        //printf("%s\n", c1->response);
     }
 
     //parse request to get the content length
