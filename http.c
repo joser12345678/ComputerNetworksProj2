@@ -84,7 +84,7 @@ int send_request(struct http_connection_info* info, SSL* ssl)
     //make sure null terminated string
     info->response[total_bytes] = 0;
     info->content_length = info->high_range - info->low_range;
-    printf("%ld\n", info->content_length);
+    //printf("%ld\n", info->content_length);
 
     //check the http return code
     if ((strstr(info->response, "200 OK")) || strstr(info->response, "206 Partial Content"))

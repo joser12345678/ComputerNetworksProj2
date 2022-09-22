@@ -8,6 +8,19 @@
 #include "http.h"
 #include "pthread.h"
 
+//used in protecting file list writes
+pthread_mutex_t file_mut;
+
+struct thread_args
+{
+    size_t low_b;
+    size_t high_b;
+    char* url;
+    char* unit;
+    size_t file_num;
+    char** file_name;
+};
+
 //prints help message
 void print_help()
 {
@@ -137,14 +150,15 @@ void initial_head_request(struct http_connection_info* c1, char* url)
 
 //create a sub request and fulfill it using the bounds specified
 //in the parameters
-char* sub_req(size_t low_b, size_t high_b, char* url, char* unit, size_t file_num)
+void* sub_req(void* args)
 {
-    printf("%ld - %ld\n", low_b, high_b);
+    struct thread_args* args1 = (struct thread_args*) args;
+    //printf("%ld - %ld\n", args1->low_b, args1->high_b);
     struct http_connection_info* conn = malloc(sizeof(struct http_connection_info));
-    init_connection(conn, url);
-    conn->low_range = low_b;
-    conn->high_range = high_b;
-    conn->content_unit = unit;
+    init_connection(conn, args1->url);
+    conn->low_range = args1->low_b;
+    conn->high_range = args1->high_b;
+    conn->content_unit = args1->unit;
 
     //initialize tcp clientside connection socket
     int socket;
@@ -181,9 +195,11 @@ char* sub_req(size_t low_b, size_t high_b, char* url, char* unit, size_t file_nu
     }
     
     char* s = strstr(conn->response, "\r\n\r\n");
-    char* file_name = malloc(11);
-    sprintf(file_name, "./part_%ld", file_num);
-    FILE* file = fopen(file_name,"wb");
+    pthread_mutex_lock(&file_mut);
+    *args1->file_name = malloc(11);
+    sprintf(*args1->file_name, "./part_%ld", args1->file_num);
+    FILE* file = fopen(*args1->file_name,"wb");
+    pthread_mutex_unlock(&file_mut);
     fwrite(s + 4, conn->content_length, 1, file);
     fclose(file);
 
@@ -191,8 +207,8 @@ char* sub_req(size_t low_b, size_t high_b, char* url, char* unit, size_t file_nu
     ssl_session_free(ssl);
     ssl_socket_close(&socket);
     ssl_context_free(ssl_context);
+    pthread_exit(NULL);
 
-    return file_name;
 }
 
 //writes all input files to output file
@@ -230,6 +246,9 @@ int main(int argc, char* argv[])
     //printf("%s\n", url);
     if(err == 0)
     {
+        //init mutex
+        pthread_mutex_init(&file_mut, NULL);
+
         struct http_connection_info* c1;
         //init info in memory
         c1 = malloc(sizeof(struct http_connection_info));
@@ -241,28 +260,46 @@ int main(int argc, char* argv[])
         size_t total_content_size = c1->high_range;
 
         char* filenames[thread_count];
+        pthread_t threads[thread_count];
+        struct thread_args t1[thread_count];
 
         //calculate the bounds for each sub request
         size_t thread_content_size = total_content_size / thread_count;
         size_t start_bound = 0;
         for(size_t i = 1; i < thread_count + 1; i++)
         {
-            
+            t1[i - 1].file_name = &filenames[i - 1];
+            t1[i - 1].file_num = i;
+            t1[i - 1].url = url;
+            t1[i - 1].unit = c1->content_unit;
             if( i == thread_count)
-                filenames[i - 1] = sub_req(start_bound, total_content_size, url, c1->content_unit, i);
+            {
+                //sub_req(start_bound, total_content_size, url, c1->content_unit, i, &filenames[i - 1]);
+                t1[i - 1].low_b = start_bound;
+                t1[i - 1].high_b = total_content_size;
+            }
             else
             {
-                filenames[i - 1] = sub_req(start_bound, thread_content_size * i, url, c1->content_unit, i);
+                //sub_req(start_bound, thread_content_size * i, url, c1->content_unit, i, &filenames[i - 1]);
+                t1[i - 1].low_b = start_bound;
+                t1[i - 1].high_b = thread_content_size * i;
                 start_bound = (thread_content_size * i);
             }
+            pthread_create(&threads[i - 1], NULL, sub_req, &t1[i - 1]);
+            //sub_req(&t1);
             
         }
+
+        for (size_t i = 0; i < thread_count; i++)
+            pthread_join(threads[i], NULL);
+        
 
         write_to_output(filenames, output_file, thread_count);
 
         free(url);
         free(output_file);
         free(c1);
+        pthread_mutex_destroy(&file_mut);
     }
     else
         print_help();
