@@ -3,8 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/stat.h>
 #include "ssl_socket.h"
 #include "http.h"
+#include "pthread.h"
 
 //prints help message
 void print_help()
@@ -135,8 +137,9 @@ void initial_head_request(struct http_connection_info* c1, char* url)
 
 //create a sub request and fulfill it using the bounds specified
 //in the parameters
-int sub_req(size_t low_b, size_t high_b, char* url, char* unit)
+char* sub_req(size_t low_b, size_t high_b, char* url, char* unit, size_t file_num)
 {
+    printf("%ld - %ld\n", low_b, high_b);
     struct http_connection_info* conn = malloc(sizeof(struct http_connection_info));
     init_connection(conn, url);
     conn->low_range = low_b;
@@ -178,13 +181,42 @@ int sub_req(size_t low_b, size_t high_b, char* url, char* unit)
     }
     
     char* s = strstr(conn->response, "\r\n\r\n");
-    FILE* pFile = fopen("./testies.jpg","wb");
-    fwrite(s + 4, conn->content_length, 1, pFile);
+    char* file_name = malloc(11);
+    sprintf(file_name, "./part_%ld", file_num);
+    FILE* file = fopen(file_name,"wb");
+    fwrite(s + 4, conn->content_length, 1, file);
+    fclose(file);
 
     //test the frees and closes
     ssl_session_free(ssl);
     ssl_socket_close(&socket);
     ssl_context_free(ssl_context);
+
+    return file_name;
+}
+
+//writes all input files to output file
+void write_to_output(char** file_list, char* output_file, size_t list_length)
+{
+    FILE* output = fopen(output_file,"wb");
+    for (size_t i = 0; i < list_length; i++)
+    {
+        FILE* file = fopen(file_list[i],"rb");
+        struct stat sb;
+        if (stat(file_list[i], &sb) == -1) 
+        {
+            perror("stat");
+            exit(-1);
+        }
+
+        char* buf = malloc(sb.st_size);
+        fread(buf, sb.st_size, 1, file);
+        fwrite(buf, sb.st_size, 1, output);
+        fclose(file);
+        free(buf);
+        free(file_list[i]);
+    }
+    fclose(output);
 }
 
 int main(int argc, char* argv[])
@@ -208,19 +240,25 @@ int main(int argc, char* argv[])
         //printf("%s\n", c1->response);
         size_t total_content_size = c1->high_range;
 
+        char* filenames[thread_count];
+
         //calculate the bounds for each sub request
         size_t thread_content_size = total_content_size / thread_count;
         size_t start_bound = 0;
         for(size_t i = 1; i < thread_count + 1; i++)
         {
+            
             if( i == thread_count)
-                sub_req(start_bound, total_content_size, url, c1->content_unit);
+                filenames[i - 1] = sub_req(start_bound, total_content_size, url, c1->content_unit, i);
             else
             {
-                sub_req(start_bound, thread_content_size * i, url, c1->content_unit);
-                start_bound = (thread_content_size * i) + 1;
+                filenames[i - 1] = sub_req(start_bound, thread_content_size * i, url, c1->content_unit, i);
+                start_bound = (thread_content_size * i);
             }
+            
         }
+
+        write_to_output(filenames, output_file, thread_count);
 
         free(url);
         free(output_file);

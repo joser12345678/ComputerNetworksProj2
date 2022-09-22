@@ -72,19 +72,19 @@ int send_request(struct http_connection_info* info, SSL* ssl)
     if(!SSL_write(ssl, info->request, strlen(info->request)))
         return -1;
 
-    //if write was successful, allocate response buffer and read from ssl
-    //return -1 if read was unsuccessful
-    info->response = malloc(info->read_length + info->high_range - info->low_range + 1);
+    //first we read the headers
+    info->response = malloc(info->read_length + info->high_range*2);
     size_t read_bytes;
     size_t total_bytes = 0;
-    while ((read_bytes = SSL_read(ssl, info->response + total_bytes, (info->read_length + info->high_range - info->low_range))))
+    while ((read_bytes = SSL_read(ssl, info->response + total_bytes, (info->read_length + info->high_range*2))))
         total_bytes += read_bytes;
     if(!total_bytes)
         return -1;
 
     //make sure null terminated string
     info->response[total_bytes] = 0;
-    info->content_length = total_bytes;
+    info->content_length = info->high_range - info->low_range;
+    printf("%ld\n", info->content_length);
 
     //check the http return code
     if ((strstr(info->response, "200 OK")) || strstr(info->response, "206 Partial Content"))
