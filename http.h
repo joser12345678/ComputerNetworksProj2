@@ -12,6 +12,7 @@ struct http_connection_info
     char* hostname;     //pointer to the host string
     char* path;         //resource path string
     char* port;         //pointer to the port string
+    char* cookie;
 
     size_t low_range;    //content length range low bound
     size_t high_range;   //content length range high bound
@@ -44,3 +45,6 @@ int create_get_request(struct http_connection_info* info);
 
 //save response to file
 int save_response(struct http_connection_info* info, char* file);
+
+//gets and sets cookie from response
+int get_and_set_cookie(struct http_connection_info* info);

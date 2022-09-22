@@ -50,6 +50,7 @@ void init_connection(struct http_connection_info* info, char* url)
     //set pointers and length to appropriate values
     info->request = NULL;
     info->response = NULL;
+    info->cookie = NULL;
     info->high_range = 0;
     info->low_range = 0;
     info->read_length = 1024;
@@ -59,10 +60,16 @@ void init_connection(struct http_connection_info* info, char* url)
 //request field of the struct
 int create_head_request(struct http_connection_info* info)
 {
+    if(info->request != NULL)
+        free(info->request);
+
     //allocate 1024 bytes for request body
     info->request = malloc(1024);
 
-    sprintf(info->request, "HEAD %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", info->path, info->hostname);
+    if(info->cookie == NULL)
+        sprintf(info->request, "HEAD %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nUser-Agent: Proj2App\r\n\r\n", info->path, info->hostname);
+    else
+        sprintf(info->request, "HEAD %s HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\nUser-Agent: Proj2App\r\nConnection: close\r\n\r\n", info->path, info->hostname, info->cookie);
 }
 
 int send_request(struct http_connection_info* info, SSL* ssl)
@@ -89,10 +96,31 @@ int send_request(struct http_connection_info* info, SSL* ssl)
     //check the http return code
     if ((strstr(info->response, "200 OK")) || strstr(info->response, "206 Partial Content"))
         return 0;
+    //if 403 and there is a set cookie, return 403
+    else if(strstr(info->response, "403"))
+        return 403;
     //else there was an error, print the error code and exit
     else
         return -1;
     
+}
+
+//gets cookie and sets it from response
+int get_and_set_cookie(struct http_connection_info* info)
+{
+    char* s = strstr(info->response, "Set-Cookie");
+    //if set cookie header wasn't found we fail
+    if (s == NULL)
+        return -1;
+    char* end_of_line = strstr(s, "\r\n");
+    //if the end of line wasn't found, we fail
+    if(end_of_line == NULL)
+        return -1;
+    
+    s = s + 12;
+    info->cookie = malloc(end_of_line - s);
+    strncpy(info->cookie, s, (end_of_line - s));
+    //printf("|%s|\n", info->cookie);
 }
 
 //get the content length from the response section of info
@@ -137,7 +165,7 @@ int create_get_request(struct http_connection_info* info)
     //allocate 1024 bytes for request body
     info->request = malloc(1024);
 
-    sprintf(info->request, "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nRange: %s=%ld-%ld\r\n\r\n", 
+    sprintf(info->request, "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nUser-Agent: Proj2App\r\nRange: %s=%ld-%ld\r\n\r\n", 
         info->path, info->hostname, info->content_unit, info->low_range, info->high_range);
 }
 

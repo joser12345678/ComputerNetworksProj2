@@ -128,11 +128,27 @@ void initial_head_request(struct http_connection_info* c1, char* url)
     //create head and send it
     //if the initial head request was successful and there is an accept ranges header, we can continue
     create_head_request(c1);
-    if(send_request(c1, ssl) == -1)
+    int requestRes = send_request(c1, ssl);
+    if(requestRes== -1)
     {
         printf("Response from server wasn't 200 OK or ranges not accepted. HTTP RESPONSE:\n");
         printf("%s\n", c1->response);
         exit(-1);
+    }
+    //check for a cookie and set it for the connection object
+    else if(requestRes == 403)
+    {
+        get_and_set_cookie(c1);
+        create_head_request(c1);
+        open_clientside_tcp_connection(&socket, c1->port, c1->hostname);
+        SSL_CTX* ssl_context = init_ssl_ctx();
+        SSL* ssl = ssl_new(ssl_context);
+        status = ssl_set_SNI(ssl, c1->hostname);
+        ssl_fd(&socket, ssl);
+        SSL_connect(ssl);
+        printf("%s\n", c1->request);
+        send_request(c1, ssl);
+        printf("%s\n", c1->response);
     }
 
     //parse request to get the content length
