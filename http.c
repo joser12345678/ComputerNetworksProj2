@@ -62,7 +62,7 @@ int create_head_request(struct http_connection_info* info)
     //allocate 1024 bytes for request body
     info->request = malloc(1024);
 
-    sprintf(info->request, "HEAD %s HTTP/1.1\r\nHost: %s\r\n\r\n", info->path, info->hostname);
+    sprintf(info->request, "HEAD %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", info->path, info->hostname);
 }
 
 int send_request(struct http_connection_info* info, SSL* ssl)
@@ -137,7 +137,7 @@ int create_get_request(struct http_connection_info* info)
     //allocate 1024 bytes for request body
     info->request = malloc(1024);
 
-    sprintf(info->request, "GET %s HTTP/1.1\r\nHost: %s\r\nRange: %s=%ld-%ld\r\n\r\n", 
+    sprintf(info->request, "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nRange: %s=%ld-%ld\r\n\r\n", 
         info->path, info->hostname, info->content_unit, info->low_range, info->high_range);
 }
 
