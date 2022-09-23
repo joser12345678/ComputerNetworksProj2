@@ -128,9 +128,9 @@ int get_and_set_cookie(struct http_connection_info* info)
 int get_content_length(struct http_connection_info* info)
 {
     //get pointer to the content length header
-    char* s = strstr(info->response, "Content-Length");
+    char* s = strstr(info->response, "Content-Length:");
     //if content length header wasn't found we fail
-    if (s == NULL)
+    if (s == NULL && ((s = strstr(info->response, "content-length:")) == NULL))
         return -1;
     char* end_of_line = strstr(s, "\r\n");
     //if the end of line wasn't found, we fail
@@ -138,8 +138,8 @@ int get_content_length(struct http_connection_info* info)
         return -1;
 
     //do the same to isolate the accept ranges content
-    char* ranges = strstr(info->response, "Accept-Ranges");
-    if(ranges == NULL)
+    char* ranges = strstr(info->response, "Accept-Ranges:");
+    if(ranges == NULL && ((ranges = strstr(info->response, "accept-ranges:")) == NULL))
         return -1;
     char* eol_ranges = strstr(ranges, "\r\n");
     if(eol_ranges == NULL)

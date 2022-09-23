@@ -151,6 +151,7 @@ void initial_head_request(struct http_connection_info* c1, char* url)
         //printf("%s\n", c1->response);
     }
 
+    //printf("%s", c1->response);
     //parse request to get the content length
     if(get_content_length(c1) == -1)
     {
