@@ -228,6 +228,7 @@ void* sub_req(void* args)
     //this is done to prevent premature freeing of info from 
     //the head connection
     free(conn.request);
+    free(conn.content_unit);
     free(conn.response);
     free(conn.path);
     free(conn.hostname);

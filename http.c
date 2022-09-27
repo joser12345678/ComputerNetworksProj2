@@ -51,8 +51,8 @@ void init_connection(struct http_connection_info* info, char* url)
     info->request = NULL;
     info->response = NULL;
     info->cookie = NULL;
-    info->content_unit = malloc(5);
-    strncpy(info->content_unit, "bytes", 5);
+    info->content_unit = malloc(6);
+    strncpy(info->content_unit, "bytes\0", 6);
     info->high_range = 0;
     info->low_range = 0;
     info->read_length = 1024;
