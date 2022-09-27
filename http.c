@@ -51,6 +51,8 @@ void init_connection(struct http_connection_info* info, char* url)
     info->request = NULL;
     info->response = NULL;
     info->cookie = NULL;
+    info->content_unit = malloc(5);
+    strncpy(info->content_unit, "bytes", 5);
     info->high_range = 0;
     info->low_range = 0;
     info->read_length = 1024;
@@ -137,22 +139,25 @@ int get_content_length(struct http_connection_info* info)
     if(end_of_line == NULL)
         return -1;
 
+    //get the content length, it is a number per the http standard
+    s = s + 16;
+    char num_ptr[(end_of_line - s + 1)];
+    strncpy(num_ptr, s, (end_of_line - s));
+    num_ptr[end_of_line - s] = '\0';
+
+    info->high_range = atoi(num_ptr);
+
     //do the same to isolate the accept ranges content
     char* ranges = strstr(info->response, "Accept-Ranges:");
     if(ranges == NULL && ((ranges = strstr(info->response, "accept-ranges:")) == NULL))
-        return -1;
+        return 0;
     char* eol_ranges = strstr(ranges, "\r\n");
     if(eol_ranges == NULL)
         return -1;
 
-    //get the content length, it is a number per the http standard
-    s = s + 16;
-    char num_ptr[(end_of_line - s)];
-    strncpy(num_ptr, s, (end_of_line - s));
-    info->high_range = atoi(num_ptr);
-
     //get the content unit
     ranges = ranges + 14;
+    free(info->content_unit);
     info->content_unit = malloc(eol_ranges - ranges);
     strncpy(info->content_unit, ranges, (eol_ranges - ranges));
 

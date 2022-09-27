@@ -208,6 +208,7 @@ void* sub_req(void* args)
     {
         printf("Response from server wasn't 200 OK. HTTP RESPONSE:\n");
         printf("%s\n", conn.response);
+        printf("%s\n", conn.request);
         exit(-1);
     }
     
